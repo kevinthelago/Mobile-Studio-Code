@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Mobile Studio Code",
+    "slug": "mobile-studio-code",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kevinthelago.mobilestudiocode"
+    },
+    "android": {
+      "package": "com.kevinthelago.mobilestudiocode"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
