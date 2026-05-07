@@ -2,18 +2,23 @@
   "expo": {
     "name": "Mobile Studio Code",
     "slug": "mobile-studio-code",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "mobilestudiocode",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.kevinthelago.mobilestudiocode"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mobilestudiocode.app"
     },
     "android": {
-      "package": "com.kevinthelago.mobilestudiocode"
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0d14"
+      },
+      "package": "com.mobilestudiocode.app"
     },
     "plugins": [
+      "expo-router",
       "expo-secure-store"
     ]
   }
