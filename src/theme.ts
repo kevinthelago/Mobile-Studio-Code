@@ -1,3 +1,9 @@
+import {
+  createContext, useContext, useEffect, useMemo, useState, createElement,
+  type ReactElement, type ReactNode,
+} from 'react';
+import * as SecureStore from 'expo-secure-store';
+
 export interface CodePalette {
   kw: string;
   fn: string;
@@ -9,6 +15,7 @@ export interface CodePalette {
   pn: string;
   pa: string;
   id: string;
+  sp: string;
 }
 
 export interface Theme {
@@ -21,10 +28,8 @@ export interface Theme {
   accent2: string;
   surface: string;
   surfaceSolid: string;
-  border: string;
   borderColor: string;
   radius: number;
-  fontUI: string;
   fontMono: string;
   code: CodePalette;
   statusFg: string;
@@ -34,7 +39,9 @@ export interface Theme {
   light?: boolean;
 }
 
-export const THEMES: Record<string, Theme> = {
+export type ThemeId = 'glass' | 'dawn' | 'terminal' | 'paper' | 'basic';
+
+export const THEMES: Record<ThemeId, Theme> = {
   glass: {
     name: 'iOS Liquid Glass',
     bg: '#0b0d14',
@@ -45,12 +52,14 @@ export const THEMES: Record<string, Theme> = {
     accent2: '#c084fc',
     surface: 'rgba(28,32,46,0.55)',
     surfaceSolid: '#13161e',
-    border: '1px solid rgba(255,255,255,0.10)',
     borderColor: 'rgba(255,255,255,0.10)',
     radius: 24,
-    fontUI: 'System',
-    fontMono: 'Courier',
-    code: { kw: '#c084fc', fn: '#67d3ff', st: '#f0a37e', nm: '#ffd479', cm: 'rgba(160,170,200,0.55)', ty: '#7ee2c4', op: '#cdd2e0', pn: 'rgba(220,225,240,0.5)', pa: '#ffaecf', id: '#e6e9f2' },
+    fontMono: 'Menlo',
+    code: {
+      kw: '#c084fc', fn: '#67d3ff', st: '#f0a37e', nm: '#ffd479',
+      cm: 'rgba(160,170,200,0.55)', ty: '#7ee2c4', op: '#cdd2e0',
+      pn: 'rgba(220,225,240,0.5)', pa: '#ffaecf', id: '#e6e9f2', sp: '#e6e9f2',
+    },
     statusFg: '#fff',
     glass: true,
     orbs: true,
@@ -65,16 +74,18 @@ export const THEMES: Record<string, Theme> = {
     accent2: '#ffaecf',
     surface: '#13100d',
     surfaceSolid: '#13100d',
-    border: '1px solid #2a241f',
     borderColor: '#2a241f',
     radius: 18,
-    fontUI: 'System',
-    fontMono: 'Courier',
-    code: { kw: '#e0a3ff', fn: '#9bd9ff', st: '#ffb088', nm: '#ffd479', cm: '#5a5550', ty: '#a8e6c4', op: '#a8a095', pn: '#6a655f', pa: '#ffaecf', id: '#e8e2d8' },
+    fontMono: 'Menlo',
+    code: {
+      kw: '#e0a3ff', fn: '#9bd9ff', st: '#ffb088', nm: '#ffd479',
+      cm: '#5a5550', ty: '#a8e6c4', op: '#a8a095',
+      pn: '#6a655f', pa: '#ffaecf', id: '#e8e2d8', sp: '#e8e2d8',
+    },
     statusFg: '#e8e2d8',
   },
   terminal: {
-    name: 'Terminal Native',
+    name: 'Terminal',
     bg: '#08090d',
     fg: '#d4d4d8',
     fgMuted: '#6b7280',
@@ -83,12 +94,14 @@ export const THEMES: Record<string, Theme> = {
     accent2: '#7dd3fc',
     surface: '#0a0c11',
     surfaceSolid: '#0d0f15',
-    border: '1px solid #1f2430',
     borderColor: '#1f2430',
     radius: 4,
-    fontUI: 'Courier',
-    fontMono: 'Courier',
-    code: { kw: '#7dd3fc', fn: '#a3e635', st: '#fbbf77', nm: '#fcd34d', cm: '#525866', ty: '#86efac', op: '#9ca3af', pn: '#6b7280', pa: '#f0a3c0', id: '#d4d4d8' },
+    fontMono: 'Menlo',
+    code: {
+      kw: '#7dd3fc', fn: '#a3e635', st: '#fbbf77', nm: '#fcd34d',
+      cm: '#525866', ty: '#86efac', op: '#9ca3af',
+      pn: '#6b7280', pa: '#f0a3c0', id: '#d4d4d8', sp: '#d4d4d8',
+    },
     statusFg: '#d4d4d8',
     sharp: true,
   },
@@ -102,18 +115,20 @@ export const THEMES: Record<string, Theme> = {
     accent2: '#9b3d2e',
     surface: '#fbf8f1',
     surfaceSolid: '#fbf8f1',
-    border: '1px solid #e6dfd0',
     borderColor: '#e6dfd0',
     radius: 6,
-    fontUI: 'Georgia',
-    fontMono: 'Courier',
-    code: { kw: '#9b3d2e', fn: '#5a4a2a', st: '#7a6a3a', nm: '#b67d3a', cm: '#a8a095', ty: '#5a6a4a', op: '#5a4a3a', pn: '#b8aea0', pa: '#7a4a2a', id: '#3a3530' },
+    fontMono: 'Menlo',
+    code: {
+      kw: '#9b3d2e', fn: '#5a4a2a', st: '#7a6a3a', nm: '#b67d3a',
+      cm: '#a8a095', ty: '#5a6a4a', op: '#5a4a3a',
+      pn: '#b8aea0', pa: '#7a4a2a', id: '#3a3530', sp: '#3a3530',
+    },
     statusFg: '#1a1612',
     light: true,
   },
   basic: {
     name: 'Basic',
-    bg: '#ffffff',
+    bg: '#fff',
     fg: '#24292f',
     fgMuted: '#57606a',
     fgDim: '#8c959f',
@@ -121,13 +136,73 @@ export const THEMES: Record<string, Theme> = {
     accent2: '#1a7f37',
     surface: '#f6f8fa',
     surfaceSolid: '#f6f8fa',
-    border: '1px solid #d0d7de',
     borderColor: '#d0d7de',
     radius: 6,
-    fontUI: 'System',
-    fontMono: 'Courier',
-    code: { kw: '#0550ae', fn: '#5d3eb2', st: '#0a7d4a', nm: '#b35b00', cm: '#6a737d', ty: '#0a7d4a', op: '#24292f', pn: '#6a737d', pa: '#953800', id: '#24292f' },
-    statusFg: '#000000',
+    fontMono: 'Menlo',
+    code: {
+      kw: '#0550ae', fn: '#5d3eb2', st: '#0a7d4a', nm: '#b35b00',
+      cm: '#6a737d', ty: '#0a7d4a', op: '#24292f',
+      pn: '#6a737d', pa: '#953800', id: '#24292f', sp: '#24292f',
+    },
+    statusFg: '#000',
     light: true,
   },
 };
+
+export const DEFAULT_THEME_ID: ThemeId = 'glass';
+export const DEFAULT_THEME = THEMES[DEFAULT_THEME_ID];
+
+const THEME_KEY = 'ui_theme_id';
+
+type ThemeContextValue = {
+  theme: Theme;
+  themeId: ThemeId;
+  setThemeId: (id: ThemeId) => void;
+};
+
+const ThemeContext = createContext<ThemeContextValue>({
+  theme: DEFAULT_THEME,
+  themeId: DEFAULT_THEME_ID,
+  setThemeId: () => {},
+});
+
+export function ThemeProvider({ children }: { children: ReactNode }): ReactElement {
+  const [themeId, setThemeIdState] = useState<ThemeId>(DEFAULT_THEME_ID);
+
+  useEffect(() => {
+    let cancelled = false;
+    SecureStore.getItemAsync(THEME_KEY).then((stored) => {
+      if (cancelled) return;
+      if (stored && stored in THEMES) setThemeIdState(stored as ThemeId);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const value = useMemo<ThemeContextValue>(() => ({
+    theme: THEMES[themeId],
+    themeId,
+    setThemeId: (id) => {
+      setThemeIdState(id);
+      SecureStore.setItemAsync(THEME_KEY, id).catch(() => {});
+    },
+  }), [themeId]);
+
+  return createElement(ThemeContext.Provider, { value }, children);
+}
+
+export function useTheme(): Theme {
+  return useContext(ThemeContext).theme;
+}
+
+export function useThemeId(): ThemeId {
+  return useContext(ThemeContext).themeId;
+}
+
+export function useSetThemeId(): (id: ThemeId) => void {
+  return useContext(ThemeContext).setThemeId;
+}
+
+// Static export retained as a fallback for code that runs at module-load time
+// (e.g. StyleSheet.create at the top of a file). These styles will not react to
+// runtime theme changes — migrate hot paths to useTheme() inside the component.
+export const theme = DEFAULT_THEME;

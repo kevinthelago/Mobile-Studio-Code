@@ -1,77 +1,76 @@
-import { Tabs } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
-import { theme } from '../src/theme';
-import { FilesIcon, FindIcon, EditIcon, RunIcon, GitIcon } from '../src/components/TabIcons';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SessionProvider, useSession } from '../src/lib/session';
+import { ThemeProvider, useTheme } from '../src/theme';
+import { Orbs } from '../src/components/ui/Orbs';
+
+function StageGate({ children }: { children: React.ReactNode }) {
+  const { stage } = useSession();
+  const segments = useSegments() as string[];
+  const router = useRouter();
+
+  useEffect(() => {
+    if (stage === 'loading') return;
+    const inTabs = segments[0] === '(tabs)';
+    const onSetup = segments[0] === 'setup';
+    const onRepo = segments[0] === 'repo';
+
+    if (stage === 'setup' && !onSetup) router.replace('/setup');
+    else if (stage === 'repo' && !onRepo) router.replace('/repo');
+    else if (stage === 'ready' && !inTabs && !onRepo) router.replace('/(tabs)');
+  }, [stage, segments, router]);
+
+  const t = useTheme();
+  if (stage === 'loading') {
+    return (
+      <View style={[styles.loading, { backgroundColor: t.bg }]}>
+        <ActivityIndicator color={t.accent} />
+      </View>
+    );
+  }
+  return <>{children}</>;
+}
+
+function ThemedFrame({ children }: { children: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={[styles.frame, { backgroundColor: t.bg }]}>
+      <Orbs />
+      <StatusBar style={t.light ? 'dark' : 'light'} />
+      <View style={styles.content}>{children}</View>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: theme.accent,
-        tabBarInactiveTintColor: theme.fgMuted,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarBackground: () => <View style={styles.tabBarBg} />,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Files',
-          tabBarIcon: ({ color }) => <FilesIcon color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="find"
-        options={{
-          title: 'Find',
-          tabBarIcon: ({ color }) => <FindIcon color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="edit"
-        options={{
-          title: 'Edit',
-          tabBarIcon: ({ color }) => <EditIcon color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="run"
-        options={{
-          title: 'Run',
-          tabBarIcon: ({ color }) => <RunIcon color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="git"
-        options={{
-          title: 'Git',
-          tabBarIcon: ({ color }) => <GitIcon color={color} />,
-        }}
-      />
-    </Tabs>
+    <ThemeProvider>
+      <SessionProvider>
+        <ThemedFrame>
+          <StageGate>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: 'transparent' },
+              }}
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="setup" options={{ animation: 'fade' }} />
+              <Stack.Screen name="repo" options={{ animation: 'slide_from_bottom' }} />
+            </Stack>
+          </StageGate>
+        </ThemedFrame>
+      </SessionProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    position: 'absolute',
-    borderTopWidth: 0,
-    elevation: 0,
-    height: 80,
-    paddingBottom: 16,
-    paddingTop: 8,
-    backgroundColor: 'transparent',
-  },
-  tabBarBg: {
-    flex: 1,
-    backgroundColor: 'rgba(13,15,22,0.92)',
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(255,255,255,0.10)',
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
+  frame: { flex: 1 },
+  content: { flex: 1 },
+  loading: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
   },
 });

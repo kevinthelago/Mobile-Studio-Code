@@ -1,0 +1,648 @@
+import React, {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+} from 'react';
+import {
+  ChatMessage, ChatTurn, Manifest, RetryStatus, CancelSignal, TextBlock,
+  Task, TaskSummary, TaskIndex, LinkedIssue,
+} from './types';
+import { KEYS, getSecret, setSecret, deleteSecret } from './storage';
+import {
+  readManifest, writeManifest, repoDir, readText, writeText,
+  loadPending, savePending, clearPending,
+  writeTask, writeTaskIndex, readTask, deleteTask as fsDeleteTask,
+  summarizeTask,
+} from './fs';
+import {
+  bootstrapTasks, makeTask, patchIndexEntry, removeFromIndex, setActive,
+} from './tasks';
+import { runAgent, AgentEvent } from './agent';
+import { pullRepo, pushModifiedFiles } from './github';
+
+type Stage = 'loading' | 'setup' | 'repo' | 'ready';
+
+type SessionValue = {
+  stage: Stage;
+  pat: string | null;
+  apiKey: string | null;
+  ghUser: string | null;
+  manifest: Manifest | null;
+  modifiedCount: number;
+
+  // Auth + repo actions
+  saveAuth: (pat: string, apiKey: string, ghUser: string) => Promise<void>;
+  resetAuth: () => Promise<void>;
+  selectRepo: (manifest: Manifest) => Promise<void>;
+  clearRepo: () => Promise<void>;
+  refreshManifest: () => Promise<void>;
+
+  // File actions
+  currentPath: string | null;
+  openFile: (path: string) => Promise<void>;
+  closeFile: () => void;
+  currentContent: string | null;
+  setCurrentContent: (content: string) => void;
+  saveCurrentFile: () => Promise<void>;
+  isCurrentDirty: boolean;
+
+  // Sync
+  pulling: boolean;
+  pushing: boolean;
+  pull: () => Promise<{
+    updated: number; added: number; unchanged: number; conflicts: string[];
+  }>;
+  push: (message: string) => Promise<{ pushed: number }>;
+
+  // Tasks
+  taskSummaries: TaskSummary[];
+  activeTask: Task | null;
+  createTask: (title: string) => Promise<Task>;
+  switchTask: (taskId: string) => Promise<void>;
+  renameTask: (taskId: string, title: string) => Promise<void>;
+  archiveTask: (taskId: string, archived: boolean) => Promise<void>;
+  deleteTaskById: (taskId: string) => Promise<void>;
+  linkIssueToTask: (taskId: string, issue: LinkedIssue | null) => Promise<void>;
+
+  // Chat (delegates to active task)
+  turns: ChatTurn[];
+  chatBusy: boolean;
+  retry: RetryStatus;
+  resumeNotice: string | null;
+  send: (text: string) => Promise<void>;
+  cancelChat: () => void;
+  clearChat: () => Promise<void>;
+};
+
+const SessionContext = createContext<SessionValue | null>(null);
+
+export function useSession(): SessionValue {
+  const ctx = useContext(SessionContext);
+  if (!ctx) throw new Error('useSession outside SessionProvider');
+  return ctx;
+}
+
+export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [stage, setStage] = useState<Stage>('loading');
+  const [pat, setPat] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [ghUser, setGhUser] = useState<string | null>(null);
+  const [manifest, setManifest] = useState<Manifest | null>(null);
+
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [currentContent, setCurrentContentState] = useState<string | null>(null);
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
+
+  const [pulling, setPulling] = useState(false);
+  const [pushing, setPushing] = useState(false);
+
+  const [taskIndex, setTaskIndex] = useState<TaskIndex | null>(null);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  const [chatBusy, setChatBusy] = useState(false);
+  const [retry, setRetry] = useState<RetryStatus>(null);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+
+  const manifestRef = useRef<Manifest | null>(null);
+  const activeTaskRef = useRef<Task | null>(null);
+  const taskIndexRef = useRef<TaskIndex | null>(null);
+  const cancelRef = useRef<CancelSignal>({ cancelled: false });
+
+  useEffect(() => { manifestRef.current = manifest; }, [manifest]);
+  useEffect(() => { activeTaskRef.current = activeTask; }, [activeTask]);
+  useEffect(() => { taskIndexRef.current = taskIndex; }, [taskIndex]);
+
+  // Bootstrap on mount: load secrets, manifest, task index.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [p, k, u, r] = await Promise.all([
+        getSecret(KEYS.GITHUB_PAT),
+        getSecret(KEYS.ANTHROPIC_KEY),
+        getSecret(KEYS.GITHUB_USER),
+        getSecret(KEYS.REPO),
+      ]);
+      if (cancelled) return;
+      setPat(p);
+      setApiKey(k);
+      setGhUser(u);
+
+      if (!p || !k) {
+        setStage('setup');
+        return;
+      }
+      if (r) {
+        const m = await readManifest(r);
+        if (cancelled) return;
+        if (m) {
+          setManifest(m);
+          manifestRef.current = m;
+          setStage('ready');
+          return;
+        }
+      }
+      setStage('repo');
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load tasks for the active repo whenever it changes.
+  useEffect(() => {
+    if (!manifest) {
+      setTaskIndex(null);
+      setActiveTask(null);
+      activeTaskRef.current = null;
+      taskIndexRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const repo = manifest.repo;
+      const { index, active } = await bootstrapTasks(repo);
+      if (cancelled) return;
+      setTaskIndex(index);
+      setActiveTask(active);
+      taskIndexRef.current = index;
+      activeTaskRef.current = active;
+
+      // Auto-resume if a checkpoint exists for the currently-active task.
+      const pending = await loadPending(repo);
+      if (cancelled) return;
+      if (pending && (!pending.taskId || pending.taskId === active.id)) {
+        setResumeNotice('Resuming previous session…');
+        runWithCheckpoint(pending.history, true);
+      } else if (pending) {
+        // Pending belongs to a different task — discard so we don't replay it.
+        await clearPending(repo);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest?.repo]);
+
+  // Persist the active task whenever its turns/history change.
+  // Skip the initial render so we don't immediately rewrite the file we just read.
+  useEffect(() => {
+    if (!manifest || !activeTask) return;
+    writeTask(manifest.repo, activeTask).catch((e) => {
+      console.warn('writeTask failed:', e);
+    });
+  }, [manifest, activeTask]);
+
+  const modifiedCount = useMemo(() => {
+    if (!manifest) return 0;
+    return Object.values(manifest.files).filter((f) => f.modified).length;
+  }, [manifest]);
+
+  const isCurrentDirty = useMemo(() => {
+    if (currentContent === null || originalContent === null) return false;
+    return currentContent !== originalContent;
+  }, [currentContent, originalContent]);
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
+
+  const saveAuth = useCallback(async (
+    newPat: string, newKey: string, newUser: string,
+  ) => {
+    await setSecret(KEYS.GITHUB_PAT, newPat);
+    await setSecret(KEYS.ANTHROPIC_KEY, newKey);
+    await setSecret(KEYS.GITHUB_USER, newUser);
+    setPat(newPat);
+    setApiKey(newKey);
+    setGhUser(newUser);
+    setStage((s) => (s === 'setup' ? 'repo' : s));
+  }, []);
+
+  const resetAuth = useCallback(async () => {
+    await Promise.all([
+      deleteSecret(KEYS.GITHUB_PAT),
+      deleteSecret(KEYS.ANTHROPIC_KEY),
+      deleteSecret(KEYS.GITHUB_USER),
+      deleteSecret(KEYS.REPO),
+      deleteSecret(KEYS.BRANCH),
+    ]);
+    setPat(null);
+    setApiKey(null);
+    setGhUser(null);
+    setManifest(null);
+    manifestRef.current = null;
+    setStage('setup');
+  }, []);
+
+  // ── Repo ─────────────────────────────────────────────────────────────────
+
+  const selectRepo = useCallback(async (m: Manifest) => {
+    await setSecret(KEYS.REPO, m.repo);
+    await setSecret(KEYS.BRANCH, m.branch);
+    setManifest(m);
+    manifestRef.current = m;
+    setCurrentPath(null);
+    setCurrentContentState(null);
+    setOriginalContent(null);
+    setStage('ready');
+  }, []);
+
+  const clearRepo = useCallback(async () => {
+    await deleteSecret(KEYS.REPO);
+    await deleteSecret(KEYS.BRANCH);
+    setManifest(null);
+    manifestRef.current = null;
+    setCurrentPath(null);
+    setCurrentContentState(null);
+    setOriginalContent(null);
+    setStage('repo');
+  }, []);
+
+  const refreshManifest = useCallback(async () => {
+    if (!manifest) return;
+    const m = await readManifest(manifest.repo);
+    if (m) {
+      setManifest(m);
+      manifestRef.current = m;
+    }
+  }, [manifest]);
+
+  // ── File editing ─────────────────────────────────────────────────────────
+
+  const openFile = useCallback(async (path: string) => {
+    if (!manifest) return;
+    try {
+      const content = await readText(repoDir(manifest.repo) + path);
+      setCurrentPath(path);
+      setCurrentContentState(content);
+      setOriginalContent(content);
+    } catch (e) {
+      console.warn('openFile failed:', e);
+    }
+  }, [manifest]);
+
+  const closeFile = useCallback(() => {
+    setCurrentPath(null);
+    setCurrentContentState(null);
+    setOriginalContent(null);
+  }, []);
+
+  const setCurrentContent = useCallback((content: string) => {
+    setCurrentContentState(content);
+  }, []);
+
+  const saveCurrentFile = useCallback(async () => {
+    if (!manifest || !currentPath || currentContent === null) return;
+    await writeText(repoDir(manifest.repo) + currentPath, currentContent);
+    const existing = manifest.files[currentPath];
+    const updated: Manifest = {
+      ...manifest,
+      files: {
+        ...manifest.files,
+        [currentPath]: existing
+          ? { ...existing, modified: true }
+          : { sha: null, modified: true },
+      },
+    };
+    await writeManifest(updated);
+    setManifest(updated);
+    manifestRef.current = updated;
+    setOriginalContent(currentContent);
+  }, [manifest, currentPath, currentContent]);
+
+  const pull = useCallback(async () => {
+    if (!manifest || !pat) return { updated: 0, added: 0, unchanged: 0, conflicts: [] };
+    setPulling(true);
+    try {
+      const r = await pullRepo(pat, manifest);
+      setManifest({ ...r.manifest });
+      manifestRef.current = r.manifest;
+      return r;
+    } finally {
+      setPulling(false);
+    }
+  }, [manifest, pat]);
+
+  const push = useCallback(async (message: string) => {
+    if (!manifest || !pat) return { pushed: 0 };
+    setPushing(true);
+    try {
+      const r = await pushModifiedFiles(pat, manifest, message);
+      setManifest({ ...r.manifest });
+      manifestRef.current = r.manifest;
+      return r;
+    } finally {
+      setPushing(false);
+    }
+  }, [manifest, pat]);
+
+  // ── Task management ──────────────────────────────────────────────────────
+
+  // Updates active task in state, ref, and the index summary in storage.
+  const updateActiveTask = useCallback((mutator: (t: Task) => Task) => {
+    setActiveTask((prev) => {
+      if (!prev) return prev;
+      const next = mutator(prev);
+      activeTaskRef.current = next;
+      // Update index summary too so listings reflect the change.
+      const idx = taskIndexRef.current;
+      if (idx && manifestRef.current) {
+        const newIndex = patchIndexEntry(idx, next);
+        taskIndexRef.current = newIndex;
+        setTaskIndex(newIndex);
+        writeTaskIndex(manifestRef.current.repo, newIndex).catch(() => {});
+      }
+      return next;
+    });
+  }, []);
+
+  const createTask = useCallback(async (title: string): Promise<Task> => {
+    if (!manifest) throw new Error('no repo');
+    const task = makeTask(title);
+    await writeTask(manifest.repo, task);
+    const baseIndex = taskIndexRef.current ?? {
+      version: 1 as const, tasks: [], activeTaskId: null,
+    };
+    const newIndex = setActive(patchIndexEntry(baseIndex, task), task.id);
+    await writeTaskIndex(manifest.repo, newIndex);
+    setTaskIndex(newIndex);
+    setActiveTask(task);
+    taskIndexRef.current = newIndex;
+    activeTaskRef.current = task;
+    return task;
+  }, [manifest]);
+
+  const switchTask = useCallback(async (taskId: string) => {
+    if (!manifest) return;
+    if (taskId === activeTaskRef.current?.id) return;
+    if (chatBusy) {
+      // Don't switch tasks mid-agent-run; user-visible chat would jump.
+      return;
+    }
+    const task = await readTask(manifest.repo, taskId);
+    if (!task) return;
+    const idx = taskIndexRef.current;
+    if (idx) {
+      const newIndex = setActive(idx, taskId);
+      await writeTaskIndex(manifest.repo, newIndex);
+      setTaskIndex(newIndex);
+      taskIndexRef.current = newIndex;
+    }
+    setActiveTask(task);
+    activeTaskRef.current = task;
+  }, [manifest, chatBusy]);
+
+  const renameTask = useCallback(async (taskId: string, title: string) => {
+    if (!manifest) return;
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    if (activeTaskRef.current?.id === taskId) {
+      updateActiveTask((t) => ({ ...t, title: trimmed, updatedAt: Date.now() }));
+      return;
+    }
+    const task = await readTask(manifest.repo, taskId);
+    if (!task) return;
+    const next: Task = { ...task, title: trimmed, updatedAt: Date.now() };
+    await writeTask(manifest.repo, next);
+    const idx = taskIndexRef.current;
+    if (idx) {
+      const newIndex = patchIndexEntry(idx, next);
+      await writeTaskIndex(manifest.repo, newIndex);
+      setTaskIndex(newIndex);
+      taskIndexRef.current = newIndex;
+    }
+  }, [manifest, updateActiveTask]);
+
+  const archiveTask = useCallback(async (taskId: string, archived: boolean) => {
+    if (!manifest) return;
+    if (activeTaskRef.current?.id === taskId) {
+      updateActiveTask((t) => ({ ...t, archived, updatedAt: Date.now() }));
+      return;
+    }
+    const task = await readTask(manifest.repo, taskId);
+    if (!task) return;
+    const next: Task = { ...task, archived, updatedAt: Date.now() };
+    await writeTask(manifest.repo, next);
+    const idx = taskIndexRef.current;
+    if (idx) {
+      const newIndex = patchIndexEntry(idx, next);
+      await writeTaskIndex(manifest.repo, newIndex);
+      setTaskIndex(newIndex);
+      taskIndexRef.current = newIndex;
+    }
+  }, [manifest, updateActiveTask]);
+
+  const deleteTaskById = useCallback(async (taskId: string) => {
+    if (!manifest) return;
+    await fsDeleteTask(manifest.repo, taskId);
+    const idx = taskIndexRef.current;
+    if (idx) {
+      const newIndex = removeFromIndex(idx, taskId);
+      // If we just deleted the active task, pick another or create a fresh one.
+      if (newIndex.activeTaskId === null) {
+        const fallback = newIndex.tasks.find((t) => !t.archived) ?? newIndex.tasks[0];
+        if (fallback) {
+          newIndex.activeTaskId = fallback.id;
+          const fallbackTask = await readTask(manifest.repo, fallback.id);
+          if (fallbackTask) {
+            setActiveTask(fallbackTask);
+            activeTaskRef.current = fallbackTask;
+          }
+        } else {
+          // No tasks left — bootstrap a new Scratch.
+          const fresh = makeTask('Scratch');
+          await writeTask(manifest.repo, fresh);
+          newIndex.tasks.push(summarizeTask(fresh));
+          newIndex.activeTaskId = fresh.id;
+          setActiveTask(fresh);
+          activeTaskRef.current = fresh;
+        }
+      }
+      await writeTaskIndex(manifest.repo, newIndex);
+      setTaskIndex(newIndex);
+      taskIndexRef.current = newIndex;
+    }
+  }, [manifest]);
+
+  const linkIssueToTask = useCallback(async (
+    taskId: string, issue: LinkedIssue | null,
+  ) => {
+    if (!manifest) return;
+    if (activeTaskRef.current?.id === taskId) {
+      updateActiveTask((t) => ({ ...t, linkedIssue: issue, updatedAt: Date.now() }));
+      return;
+    }
+    const task = await readTask(manifest.repo, taskId);
+    if (!task) return;
+    const next: Task = { ...task, linkedIssue: issue, updatedAt: Date.now() };
+    await writeTask(manifest.repo, next);
+    const idx = taskIndexRef.current;
+    if (idx) {
+      const newIndex = patchIndexEntry(idx, next);
+      await writeTaskIndex(manifest.repo, newIndex);
+      setTaskIndex(newIndex);
+      taskIndexRef.current = newIndex;
+    }
+  }, [manifest, updateActiveTask]);
+
+  // ── Agent / chat ─────────────────────────────────────────────────────────
+
+  const handleAgentEvent = useCallback((e: AgentEvent) => {
+    updateActiveTask((task) => {
+      let turns = task.turns;
+      if (e.kind === 'message') {
+        const content = e.message.content;
+        if (typeof content === 'string') {
+          turns = [...turns, { kind: 'assistant', text: content }];
+        } else {
+          const text = content
+            .filter((b): b is TextBlock => b.type === 'text')
+            .map((b) => b.text)
+            .join('\n');
+          if (text) turns = [...turns, { kind: 'assistant', text }];
+        }
+      } else if (e.kind === 'tool_call') {
+        turns = [...turns, { kind: 'tool', name: e.name, input: e.input }];
+      } else if (e.kind === 'tool_result') {
+        const copy = [...turns];
+        for (let i = copy.length - 1; i >= 0; i--) {
+          const turn = copy[i];
+          if (turn.kind === 'tool' && turn.name === e.name && turn.result === undefined) {
+            copy[i] = { ...turn, result: e.result, isError: e.is_error };
+            break;
+          }
+        }
+        turns = copy;
+      } else if (e.kind === 'context_optimized') {
+        turns = [...turns, { kind: 'note', text: e.note }];
+      }
+      return { ...task, turns, updatedAt: Date.now() };
+    });
+  }, [updateActiveTask]);
+
+  const runWithCheckpoint = useCallback(async (
+    fromHistory: ChatMessage[], isResume: boolean,
+  ) => {
+    const m = manifestRef.current;
+    const t = activeTaskRef.current;
+    if (!m || !apiKey || !t) return;
+    cancelRef.current = { cancelled: false };
+    setChatBusy(true);
+    try {
+      const finalHistory = await runAgent({
+        apiKey,
+        pat,
+        initialHistory: fromHistory,
+        manifest: m,
+        linkedIssue: t.linkedIssue,
+        onEvent: handleAgentEvent,
+        onManifestUpdate: (newManifest) => {
+          manifestRef.current = newManifest;
+          setManifest(newManifest);
+        },
+        onRetry: setRetry,
+        onCheckpoint: async (msgs) => {
+          await savePending(m.repo, {
+            history: msgs,
+            startedAt: Date.now(),
+            taskId: activeTaskRef.current?.id,
+          });
+        },
+        onComplete: async () => {
+          await clearPending(m.repo);
+        },
+        signal: cancelRef.current,
+      });
+      // Persist the final history into whichever task is now active. It's
+      // safe to assume the same task is active since switching is blocked
+      // while chatBusy is true.
+      updateActiveTask((task) => ({
+        ...task, history: finalHistory, updatedAt: Date.now(),
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed';
+      const prefix = isResume ? 'Resume failed: ' : '! ';
+      updateActiveTask((task) => ({
+        ...task,
+        turns: [...task.turns, { kind: 'assistant', text: prefix + msg }],
+        updatedAt: Date.now(),
+      }));
+    } finally {
+      setChatBusy(false);
+      setRetry(null);
+      setResumeNotice(null);
+    }
+  }, [apiKey, pat, handleAgentEvent, updateActiveTask]);
+
+  const send = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || chatBusy) return;
+    const t = activeTaskRef.current;
+    if (!t) return;
+    const newHistory: ChatMessage[] = [
+      ...t.history,
+      { role: 'user', content: trimmed },
+    ];
+    updateActiveTask((task) => ({
+      ...task,
+      turns: [...task.turns, { kind: 'user', text: trimmed }],
+      history: newHistory,
+      updatedAt: Date.now(),
+    }));
+    await runWithCheckpoint(newHistory, false);
+  }, [chatBusy, runWithCheckpoint, updateActiveTask]);
+
+  const cancelChat = useCallback(() => {
+    cancelRef.current.cancelled = true;
+  }, []);
+
+  const clearChat = useCallback(async () => {
+    if (!manifest) return;
+    await clearPending(manifest.repo);
+    updateActiveTask((task) => ({
+      ...task, turns: [], history: [], updatedAt: Date.now(),
+    }));
+  }, [manifest, updateActiveTask]);
+
+  const value: SessionValue = {
+    stage,
+    pat,
+    apiKey,
+    ghUser,
+    manifest,
+    modifiedCount,
+
+    saveAuth,
+    resetAuth,
+    selectRepo,
+    clearRepo,
+    refreshManifest,
+
+    currentPath,
+    openFile,
+    closeFile,
+    currentContent,
+    setCurrentContent,
+    saveCurrentFile,
+    isCurrentDirty,
+
+    pulling,
+    pushing,
+    pull,
+    push,
+
+    taskSummaries: taskIndex?.tasks ?? [],
+    activeTask,
+    createTask,
+    switchTask,
+    renameTask,
+    archiveTask,
+    deleteTaskById,
+    linkIssueToTask,
+
+    turns: activeTask?.turns ?? [],
+    chatBusy,
+    retry,
+    resumeNotice,
+    send,
+    cancelChat,
+    clearChat,
+  };
+
+  return (
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+  );
+}

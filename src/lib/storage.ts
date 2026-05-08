@@ -1,15 +1,21 @@
 import * as SecureStore from 'expo-secure-store';
 
-const KEY = 'anthropic_api_key';
+export const KEYS = {
+  GITHUB_PAT: 'github_pat',
+  GITHUB_USER: 'github_user',
+  ANTHROPIC_KEY: 'anthropic_api_key',
+  REPO: 'repo_full_name',
+  BRANCH: 'repo_branch',
+} as const;
 
-export async function getApiKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(KEY);
+export async function getSecret(key: string): Promise<string | null> {
+  return SecureStore.getItemAsync(key);
 }
 
-export async function setApiKey(value: string): Promise<void> {
-  await SecureStore.setItemAsync(KEY, value);
+export async function setSecret(key: string, value: string): Promise<void> {
+  await SecureStore.setItemAsync(key, value);
 }
 
-export async function clearApiKey(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY);
+export async function deleteSecret(key: string): Promise<void> {
+  await SecureStore.deleteItemAsync(key);
 }
