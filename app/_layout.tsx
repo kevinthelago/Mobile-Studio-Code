@@ -46,13 +46,13 @@ function ThemedFrame({ children }: { children: React.ReactNode }) {
 }
 
 function InnerStack() {
-  const t = useTheme();
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        // Paints the native UIViewController background — stops grey bleed-through
-        screenBackgroundColor: t.bg,
+        // Native screen bg comes from ThemedFrame; keep stack content
+        // transparent so the orbs/theme bg show through. (The native-stack
+        // accepts contentStyle even though Tabs doesn't.)
         contentStyle: { backgroundColor: 'transparent' },
         animation: 'fade',
       }}

@@ -1,18 +1,14 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { BottomTabBar } from '../../src/components/ui/BottomTabBar';
-import { useTheme } from '../../src/theme';
 
 export default function TabsLayout() {
-  const t = useTheme();
+  // Native screen background is painted by ThemedFrame in app/_layout.tsx;
+  // BottomTabNavigationOptions doesn't accept screenBackgroundColor /
+  // contentStyle in the installed expo-router version, so we don't try.
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        // Set native screen background so the UIViewController doesn't bleed grey
-        screenBackgroundColor: t.bg,
-        contentStyle: { backgroundColor: 'transparent' },
-      }}
+      screenOptions={{ headerShown: false }}
       tabBar={(props) => <BottomTabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: 'Files' }} />
@@ -20,8 +16,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="edit" options={{ title: 'Edit' }} />
       <Tabs.Screen name="run" options={{ title: 'Run' }} />
       <Tabs.Screen name="git" options={{ title: 'Git' }} />
-      <Tabs.Screen name="files" options={{ href: null }} />
-      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
