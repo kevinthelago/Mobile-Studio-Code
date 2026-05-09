@@ -2,9 +2,10 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, SafeAreaView, ActivityIndicator,
+  TouchableOpacity, ActivityIndicator,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { theme } from '../src/theme';
 import { runAgentLoop, AgentEntry, MAX_ITERATIONS } from '../src/lib/agent';
@@ -90,6 +91,7 @@ function EntryRow({ entry }: { entry: AgentEntry }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function RunScreen() {
+  const insets = useSafeAreaInsets();
   const [entries, setEntries] = useState<AgentEntry[]>([
     { kind: 'system', text: `agent · max ${MAX_ITERATIONS} iterations` },
   ]);
@@ -142,103 +144,101 @@ export default function RunScreen() {
   const toolCount = entries.filter((e) => e.kind === 'tool').length;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
-      >
-        <View style={styles.container}>
-          {/* Top pill */}
-          <View style={styles.topPill}>
-            <View style={styles.claudeAvatar} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pillTitle}>Agent</Text>
-              <Text style={styles.pillSub}>
-                {turnCount} turn{turnCount !== 1 ? 's' : ''} · {toolCount} tool call{toolCount !== 1 ? 's' : ''}
-                {busy ? ' · running…' : ''}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.iconBtn} onPress={handleNew} disabled={busy}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: theme.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
+    >
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {/* Top pill */}
+        <View style={styles.topPill}>
+          <View style={styles.claudeAvatar} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pillTitle}>Agent</Text>
+            <Text style={styles.pillSub}>
+              {turnCount} turn{turnCount !== 1 ? 's' : ''} · {toolCount} tool call{toolCount !== 1 ? 's' : ''}
+              {busy ? ' · running…' : ''}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleNew} disabled={busy}>
+            <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+              <Path
+                d="M7 1v3M7 10v3M1 7h3M10 7h3M3 3l2 2M9 9l2 2M3 11l2-2M9 5l2-2"
+                stroke={busy ? theme.fgDim : theme.fg}
+                strokeWidth={1.6}
+                strokeLinecap="round"
+              />
+            </Svg>
+          </TouchableOpacity>
+        </View>
+
+        {/* Transcript */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.transcript}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          {entries.map((e, i) => <EntryRow key={i} entry={e} />)}
+        </ScrollView>
+
+        {/* Suggestion chips — only show when idle and no history */}
+        {!busy && history.length === 0 && (
+          <View style={styles.suggestions}>
+            {SUGGESTIONS.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={styles.suggChip}
+                onPress={() => handleSend(s)}
+              >
+                <Text style={styles.suggText}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Input bar */}
+        <View style={styles.inputBar}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask the agent…"
+            placeholderTextColor={theme.fgDim}
+            style={styles.inputText}
+            editable={!busy}
+            onSubmitEditing={() => handleSend()}
+            returnKeyType="send"
+            multiline={false}
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!input.trim() || busy) && styles.sendBtnDisabled]}
+            onPress={() => handleSend()}
+            disabled={!input.trim() || busy}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
               <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
                 <Path
-                  d="M7 1v3M7 10v3M1 7h3M10 7h3M3 3l2 2M9 9l2 2M3 11l2-2M9 5l2-2"
-                  stroke={busy ? theme.fgDim : theme.fg}
-                  strokeWidth={1.6}
+                  d="M7 11V3M3 7l4-4 4 4"
+                  stroke="#fff"
+                  strokeWidth={2}
                   strokeLinecap="round"
                 />
               </Svg>
-            </TouchableOpacity>
-          </View>
-
-          {/* Transcript */}
-          <ScrollView
-            ref={scrollRef}
-            style={styles.transcript}
-            contentContainerStyle={{ paddingBottom: 16 }}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-          >
-            {entries.map((e, i) => <EntryRow key={i} entry={e} />)}
-          </ScrollView>
-
-          {/* Suggestion chips — only show when idle and no history */}
-          {!busy && history.length === 0 && (
-            <View style={styles.suggestions}>
-              {SUGGESTIONS.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={styles.suggChip}
-                  onPress={() => handleSend(s)}
-                >
-                  <Text style={styles.suggText}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Input bar */}
-          <View style={styles.inputBar}>
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder="Ask the agent…"
-              placeholderTextColor={theme.fgDim}
-              style={styles.inputText}
-              editable={!busy}
-              onSubmitEditing={() => handleSend()}
-              returnKeyType="send"
-              multiline={false}
-            />
-            <TouchableOpacity
-              style={[styles.sendBtn, (!input.trim() || busy) && styles.sendBtnDisabled]}
-              onPress={() => handleSend()}
-              disabled={!input.trim() || busy}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
-                  <Path
-                    d="M7 11V3M3 7l4-4 4 4"
-                    stroke="#fff"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                  />
-                </Svg>
-              )}
-            </TouchableOpacity>
-          </View>
+            )}
+          </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.bg },
+  root: { flex: 1 },
   container: { flex: 1, backgroundColor: theme.bg, paddingBottom: 12 },
 
   topPill: {
