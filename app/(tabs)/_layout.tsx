@@ -5,7 +5,8 @@ import { BottomTabBar } from '../../src/components/ui/BottomTabBar';
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}
+      sceneContainerStyle={{ backgroundColor: 'transparent' }}
       tabBar={(props) => <BottomTabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: 'Files' }} />
@@ -14,6 +15,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="run" options={{ title: 'Run' }} />
       <Tabs.Screen name="git" options={{ title: 'Git' }} />
       <Tabs.Screen name="files" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
