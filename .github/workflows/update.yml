@@ -49,8 +49,14 @@ jobs:
           eas channel:create ${{ steps.channel.outputs.name }} \
             --json --non-interactive 2>/dev/null || true
 
+      # Commit messages can contain backticks, $VAR, "$()", etc. Splatting the
+      # raw message into a shell-quoted string opens the workflow to shell
+      # injection from anyone who can push. Pass it via env so the value is
+      # only ever expanded once, by parameter substitution.
       - name: Publish update
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           eas update \
             --branch ${{ steps.channel.outputs.name }} \
-            --message "${{ github.event.head_commit.message }}"
+            --message "$COMMIT_MSG"
