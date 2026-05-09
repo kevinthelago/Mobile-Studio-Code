@@ -157,7 +157,7 @@ export default function RepoScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   flex1: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 60 },
   backLink: { paddingVertical: 6 },

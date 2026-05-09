@@ -193,7 +193,7 @@ function ImagePreviewStrip({
             onPress={() => onRemove(i)}
             hitSlop={8}
           >
-            <Text style={styles.previewRemoveText}>✕</Text>
+            <Text style={styles.previewRemoveText}>×</Text>
           </Pressable>
         </View>
       ))}
@@ -427,7 +427,7 @@ export default function EditScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   flex1: { flex: 1 },
   container: { flex: 1 },
   empty: {

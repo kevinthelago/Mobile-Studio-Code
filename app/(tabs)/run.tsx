@@ -83,7 +83,7 @@ function TurnView({ turn }: { turn: ChatTurn }) {
       <Text style={[styles.noteLine, {
         color: t.fgDim, fontFamily: t.fontMono, borderLeftColor: t.borderColor,
       }]}>
-        ↳ {turn.text}
+        ⏳ {turn.text}
       </Text>
     );
   }
@@ -132,8 +132,6 @@ export default function RunScreen() {
   async function handleSend(text?: string) {
     const trimmed = (text ?? input).trim();
     const imgs = pendingImages;
-    // Allow images-only sends. Suggestion chips pass `text` directly and
-    // never have images, so the suggestion path stays text-only.
     if ((!trimmed && imgs.length === 0) || chatBusy) return;
     if (text === undefined) setInput('');
     setPendingImages([]);
@@ -364,7 +362,7 @@ export default function RunScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   flex1: { flex: 1 },
   container: { flex: 1, paddingBottom: 110 },
 

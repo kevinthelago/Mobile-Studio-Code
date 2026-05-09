@@ -234,7 +234,7 @@ export default function SetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   flex1: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 60 },
   heroBlock: { paddingTop: 16, paddingBottom: 22 },
