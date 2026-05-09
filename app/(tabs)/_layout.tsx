@@ -13,6 +13,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="edit" options={{ title: 'Edit' }} />
       <Tabs.Screen name="run" options={{ title: 'Run' }} />
       <Tabs.Screen name="git" options={{ title: 'Git' }} />
+      <Tabs.Screen name="files" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
