@@ -16,14 +16,19 @@ A mobile IDE built with Expo and React Native — write, edit, and ship code fro
 
 ## 📱 Run the latest in Expo Go
 
-Every push to `main` publishes an EAS Update to the `main` channel. To open the latest build in Expo Go on your iOS device:
+Every push to `main` publishes an EAS Update to the `main` channel.
 
-**Tap on iOS:** [exp://u.expo.dev/a11a7b6c-6d05-4b39-9ff1-ea694b914b66?channel-name=main](exp://u.expo.dev/a11a7b6c-6d05-4b39-9ff1-ea694b914b66?channel-name=main)
+**[▶️ Open the latest update on expo.dev →](https://expo.dev/accounts/kevinthelago/projects/mobile-studio-code/branches/main)**
 
-**Or scan the QR for the latest update on `main`:**
-[expo.dev → branches/main](https://expo.dev/accounts/kevinthelago/projects/mobile-studio-code/branches/main)
+That page has a QR code and an "Open in Expo Go" button. The link is always live — it points at whatever was last published.
 
-> The deeplink is stable; the QR on the branch page always points at the most recent commit. Requires [Expo Go](https://expo.dev/client) installed.
+If you'd rather deeplink directly, paste this into Safari on your iOS device:
+
+```
+exp://u.expo.dev/a11a7b6c-6d05-4b39-9ff1-ea694b914b66?channel-name=main
+```
+
+> GitHub's mobile renderer strips `exp://` links so they can't be tapped from this README. The https link above works from anywhere. Requires [Expo Go](https://expo.dev/client) installed.
 
 ---
 
