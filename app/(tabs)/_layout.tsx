@@ -5,7 +5,12 @@ import { BottomTabBar } from '../../src/components/ui/BottomTabBar';
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        // Force the native RNSScreen layer to be transparent so the root
+        // ThemedFrame (bg colour + Orbs) shows through every tab.
+        contentStyle: { backgroundColor: 'transparent' },
+      }}
       tabBar={(props) => <BottomTabBar {...props} />}
       sceneContainerStyle={{ backgroundColor: 'transparent' }}
     >
