@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme';
 import { useSession } from '../../src/lib/session';
 import { detectLang, tokenizeFile } from '../../src/lib/syntax';
@@ -13,6 +14,9 @@ import { Surface } from '../../src/components/ui/Surface';
 import { TopPill } from '../../src/components/ui/TopPill';
 import { IconBtn } from '../../src/components/ui/IconBtn';
 import { ClaudeAvatar } from '../../src/components/ui/ClaudeAvatar';
+
+// Height of our custom bottom tab bar
+const TAB_BAR_HEIGHT = 60;
 
 function FilePathBreadcrumb({ path, dirty }: { path: string; dirty: boolean }) {
   const t = useTheme();
@@ -107,7 +111,7 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
       <Text style={[styles.noteLine, {
         color: t.fgDim, fontFamily: t.fontMono, borderLeftColor: t.borderColor,
       }]}>
-        ↳ {turn.text}
+        ⏳ {turn.text}
       </Text>
     );
   }
@@ -142,6 +146,7 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
 export default function EditScreen() {
   const t = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     currentPath, currentContent, setCurrentContent, saveCurrentFile,
     isCurrentDirty, turns, send, chatBusy,
@@ -153,6 +158,10 @@ export default function EditScreen() {
 
   const recentTurns = useMemo(() => turns.slice(-6), [turns]);
   const toolCount = useMemo(() => turns.filter((x) => x.kind === 'tool').length, [turns]);
+
+  // keyboardVerticalOffset = tab bar + bottom safe area inset
+  // This tells KAV how much non-keyboard space sits below the view
+  const kbOffset = TAB_BAR_HEIGHT + insets.bottom;
 
   useEffect(() => {
     setEditMode(false);
@@ -203,6 +212,7 @@ export default function EditScreen() {
       <KeyboardAvoidingView
         style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={kbOffset}
       >
         <View style={styles.container}>
           <TopPill
@@ -225,7 +235,7 @@ export default function EditScreen() {
             ) : (
               <IconBtn onPress={() => setEditMode((m) => !m)}>
                 <Text style={[styles.modeBadge, { color: editMode ? t.accent : t.fgMuted }]}>
-                  {editMode ? '✎' : '◎'}
+                  {editMode ? '✎' : '✎'}
                 </Text>
               </IconBtn>
             )}
@@ -351,7 +361,7 @@ const styles = StyleSheet.create({
   claudeTools: { fontSize: 12 },
 
   claudePanelWrap: {
-    flex: 1, marginHorizontal: 12, marginBottom: 110,
+    flex: 1, marginHorizontal: 12, marginBottom: 12,
   },
   claudePanel: {
     flex: 1,
