@@ -4,32 +4,42 @@ import { useTheme } from '../../theme';
 
 type OrbDef = { left: number; top: number; size: number; color: string };
 
-const ORBS: OrbDef[] = [
+const GLASS_ORBS: OrbDef[] = [
   { left: -80, top: 80, size: 280, color: '#5b3fc8' },
   { left: 220, top: 240, size: 240, color: '#1f6dd9' },
   { left: -40, top: 560, size: 260, color: '#0f5b6b' },
   { left: 180, top: 720, size: 220, color: '#7a2a6a' },
 ];
 
-// Ambient blurred color orbs. Only renders for themes with `orbs: true` (glass).
+// Subtle orbs for dark themes that don't have full glass effect
+const DARK_ORBS: OrbDef[] = [
+  { left: -60, top: 120, size: 200, color: '#2a1f4a' },
+  { left: 200, top: 400, size: 180, color: '#0f2a3a' },
+  { left: -20, top: 650, size: 160, color: '#1a2a1a' },
+];
+
+// Ambient blurred color orbs. Renders for all dark themes.
 // Native RN doesn't support filter:blur, so we approximate with a stack of
 // progressively-larger semi-transparent rings around each orb center.
 export function Orbs() {
   const t = useTheme();
-  if (!t.orbs) return null;
+  // Don't render on light themes — their bg is already the right colour
+  if (t.light) return null;
+
+  const orbs = t.orbs ? GLASS_ORBS : DARK_ORBS;
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {ORBS.map((o, i) => (
-        <SoftOrb key={i} {...o} />
+      {orbs.map((o, i) => (
+        <SoftOrb key={i} {...o} isGlass={!!t.orbs} />
       ))}
     </View>
   );
 }
 
-function SoftOrb({ left, top, size, color }: OrbDef) {
-  // Stack of rings approximates Gaussian blur. Each ring is slightly bigger
-  // and more transparent than the last; combined they give a soft falloff.
-  const rings = 5;
+function SoftOrb({ left, top, size, color, isGlass }: OrbDef & { isGlass: boolean }) {
+  const rings = isGlass ? 5 : 3;
+  const baseOpacity = isGlass ? 0.45 : 0.3;
   return (
     <View
       pointerEvents="none"
@@ -43,7 +53,7 @@ function SoftOrb({ left, top, size, color }: OrbDef) {
     >
       {Array.from({ length: rings }).map((_, i) => {
         const expand = i * (size * 0.12);
-        const opacity = 0.45 * (1 - i / rings);
+        const opacity = baseOpacity * (1 - i / rings);
         return (
           <View
             key={i}

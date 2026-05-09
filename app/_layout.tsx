@@ -39,6 +39,7 @@ function ThemedFrame({ children }: { children: React.ReactNode }) {
     <View style={[styles.frame, { backgroundColor: t.bg }]}>
       <Orbs />
       <StatusBar style={t.light ? 'dark' : 'light'} />
+      {/* content must be transparent so t.bg + Orbs show through all screens */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -54,6 +55,7 @@ export default function RootLayout() {
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: 'transparent' },
+                animation: 'fade',
               }}
             >
               <Stack.Screen name="(tabs)" />
@@ -69,7 +71,8 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   frame: { flex: 1 },
-  content: { flex: 1 },
+  // transparent so the frame's bg colour and Orbs bleed through every screen
+  content: { flex: 1, backgroundColor: 'transparent' },
   loading: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
   },
