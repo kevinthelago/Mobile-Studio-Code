@@ -25,7 +25,7 @@ import {
   clearAll,
   clearResolved,
 } from '../src/lib/errorBus';
-import { useTheme } from '../src/ThemeContext';
+import { useTheme } from '../src/theme';
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 

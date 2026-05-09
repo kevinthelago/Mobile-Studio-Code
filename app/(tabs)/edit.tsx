@@ -242,10 +242,11 @@ export default function EditScreen() {
   async function handleSend() {
     const trimmed = input.trim();
     if ((!trimmed && pendingImages.length === 0) || chatBusy) return;
-    const imgs = pendingImages.length > 0 ? pendingImages : undefined;
     setInput('');
     setPendingImages([]);
-    await send(trimmed, imgs);
+    // TODO: image attachments — session.tsx send() signature is text-only
+    // until the multimodal path is reintegrated. Drop pendingImages for now.
+    await send(trimmed);
   }
 
   async function handlePickImage() {

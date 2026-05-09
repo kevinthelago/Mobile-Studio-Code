@@ -39,7 +39,14 @@ export async function writeText(absPath: string, content: string): Promise<void>
   await FileSystem.writeAsStringAsync(absPath, content);
 }
 
-export async function atomicWriteText(absPath: string, content: string): Promise<void> {
+// Per-path write queue. Without this, two concurrent atomicWriteText calls
+// for the same file race on the .tmp intermediate: writer A's tmp gets
+// overwritten by writer B's tmp before A's move completes, and A's move
+// then either lands B's content or fails outright. Serializing per path
+// keeps the rename truly atomic from the caller's perspective.
+const writeQueues = new Map<string, Promise<void>>();
+
+async function rawAtomicWrite(absPath: string, content: string): Promise<void> {
   const tmp = absPath + '.tmp';
   await writeText(tmp, content);
   const targetInfo = await FileSystem.getInfoAsync(absPath);
@@ -47,6 +54,22 @@ export async function atomicWriteText(absPath: string, content: string): Promise
     await FileSystem.deleteAsync(absPath, { idempotent: true });
   }
   await FileSystem.moveAsync({ from: tmp, to: absPath });
+}
+
+export async function atomicWriteText(absPath: string, content: string): Promise<void> {
+  const previous = writeQueues.get(absPath) ?? Promise.resolve();
+  // Chain the new write after any in-flight write for the same path.
+  // Swallow the previous error so one failed write doesn't cascade.
+  const next = previous
+    .catch(() => undefined)
+    .then(() => rawAtomicWrite(absPath, content));
+  writeQueues.set(absPath, next);
+  // Clean up the queue entry once this write completes (so we don't keep
+  // a chain of completed promises in the map forever).
+  next.finally(() => {
+    if (writeQueues.get(absPath) === next) writeQueues.delete(absPath);
+  });
+  return next;
 }
 
 export async function readText(absPath: string): Promise<string> {
@@ -120,6 +143,37 @@ export async function savePending(repo: string, p: PendingOperation): Promise<vo
 
 export async function clearPending(repo: string): Promise<void> {
   await FileSystem.deleteAsync(pendingPath(repo), { idempotent: true });
+}
+
+// Cap the inlined CLAUDE.md / AGENTS.md so a runaway-large project file
+// can't blow up the system prompt. The agent can always read_file if it
+// needs the full thing.
+const PROJECT_INSTRUCTIONS_MAX_CHARS = 16_000;
+
+export type ProjectInstructions = { source: string; content: string };
+
+// Look up project-level instructions at the repo root. CLAUDE.md is the
+// canonical name; AGENTS.md is checked as a fallback for projects that use
+// the OpenAI convention. Returns null when neither file exists.
+export async function loadProjectInstructions(
+  repo: string,
+): Promise<ProjectInstructions | null> {
+  const root = repoDir(repo);
+  for (const name of ['CLAUDE.md', 'AGENTS.md']) {
+    const p = root + name;
+    if (!(await exists(p))) continue;
+    try {
+      let content = await readText(p);
+      if (content.length > PROJECT_INSTRUCTIONS_MAX_CHARS) {
+        content = content.slice(0, PROJECT_INSTRUCTIONS_MAX_CHARS) +
+          `\n\n[…truncated at ${PROJECT_INSTRUCTIONS_MAX_CHARS} chars. Use read_file("${name}") for the rest.]`;
+      }
+      return { source: name, content };
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 export function isMscMetaFile(name: string): boolean {
