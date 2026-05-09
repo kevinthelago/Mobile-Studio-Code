@@ -6,10 +6,22 @@ A mobile IDE built with Expo and React Native — write, edit, and ship code fro
 
 ## Status
 
-[![Expo Preview](https://img.shields.io/github/actions/workflow/status/LutherShawn/mobile-studio-code/expo-preview.yml?label=Expo%20Preview&logo=expo&logoColor=white)](https://github.com/LutherShawn/mobile-studio-code/actions/workflows/expo-preview.yml)
-[![Issue Branch Check](https://img.shields.io/github/actions/workflow/status/LutherShawn/mobile-studio-code/issue-branch-check.yml?label=Issue%20Check&logo=github)](https://github.com/LutherShawn/mobile-studio-code/actions/workflows/issue-branch-check.yml)
-[![GitHub Issues](https://img.shields.io/github/issues/LutherShawn/mobile-studio-code?logo=github)](https://github.com/LutherShawn/mobile-studio-code/issues)
-[![GitHub PRs](https://img.shields.io/github/issues-pr/LutherShawn/mobile-studio-code?logo=github)](https://github.com/LutherShawn/mobile-studio-code/pulls)
+[![Expo Preview](https://img.shields.io/github/actions/workflow/status/kevinthelago/Mobile-Studio-Code/expo-preview.yml?label=Expo%20Preview&logo=expo&logoColor=white)](https://github.com/kevinthelago/Mobile-Studio-Code/actions/workflows/expo-preview.yml)
+[![Issue Branch Check](https://img.shields.io/github/actions/workflow/status/kevinthelago/Mobile-Studio-Code/issue-branch-check.yml?label=Issue%20Check&logo=github)](https://github.com/kevinthelago/Mobile-Studio-Code/actions/workflows/issue-branch-check.yml)
+[![EAS Update](https://img.shields.io/github/actions/workflow/status/kevinthelago/Mobile-Studio-Code/update.yml?label=EAS%20Update&logo=expo&logoColor=white)](https://github.com/kevinthelago/Mobile-Studio-Code/actions/workflows/update.yml)
+[![GitHub Issues](https://img.shields.io/github/issues/kevinthelago/Mobile-Studio-Code?logo=github)](https://github.com/kevinthelago/Mobile-Studio-Code/issues)
+[![GitHub PRs](https://img.shields.io/github/issues-pr/kevinthelago/Mobile-Studio-Code?logo=github)](https://github.com/kevinthelago/Mobile-Studio-Code/pulls)
+
+---
+
+## 📱 Open in Expo Go
+
+Scan or tap the link below to open the latest published update directly in **Expo Go**:
+
+**[▶️ Open in Expo Go → expo.dev/@kevinthelago/mobile-studio-code](https://expo.dev/@kevinthelago/mobile-studio-code)**
+
+> Requires the [Expo Go](https://expo.dev/client) app on your iOS device.  
+> Updates publish automatically on every push to `main`.
 
 ---
 
@@ -18,7 +30,7 @@ A mobile IDE built with Expo and React Native — write, edit, and ship code fro
 > Preview bundles are built automatically on every PR to `main`.  
 > Find the latest artifact on the Actions page:
 
-**[⬇️ Download Latest Preview Bundle →](https://github.com/LutherShawn/mobile-studio-code/actions/workflows/expo-preview.yml)**
+**[⬇️ Download Latest Preview Bundle →](https://github.com/kevinthelago/Mobile-Studio-Code/actions/workflows/expo-preview.yml)**
 
 1. Open the latest successful run
 2. Scroll to **Artifacts** → download `expo-preview-pr-N`
@@ -43,9 +55,9 @@ Open Issue  →  Create Branch  →  Open PR  →  Merge  →  Issue Closes
 | Merge | Issue auto-closes, artifact is uploaded |
 
 ### Issue Templates
-- [✨ Feature](https://github.com/LutherShawn/mobile-studio-code/issues/new?template=feature.md)
-- [🐛 Bug](https://github.com/LutherShawn/mobile-studio-code/issues/new?template=bug.md)
-- [🔧 Chore](https://github.com/LutherShawn/mobile-studio-code/issues/new?template=chore.md)
+- [✨ Feature](https://github.com/kevinthelago/Mobile-Studio-Code/issues/new?template=feature.md)
+- [🐛 Bug](https://github.com/kevinthelago/Mobile-Studio-Code/issues/new?template=bug.md)
+- [🔧 Chore](https://github.com/kevinthelago/Mobile-Studio-Code/issues/new?template=chore.md)
 
 ---
 
